@@ -1,5 +1,6 @@
 # Shiny + mirai example: Single daemon processing long-running queries
 # Multiple users can submit queries; they queue and run one at a time
+# Any query that has been run before is cached on disk for fast retrieval
 
 library(shiny)
 library(bslib)
@@ -15,6 +16,29 @@ onStop(function() {
   daemons(0)
 })
 
+# Configure mirai to use duckdb with memoisation for caching
+message("Configuring all Mirai daemons")
+everywhere({
+  library(DBI)
+  library(duckdb)
+  library(memoise)
+
+  # Define function to run duckdb queries
+  get_duckdb_func <<- function(sql, params = list()) {
+    con <- dbConnect(duckdb::duckdb())
+    on.exit(dbDisconnect(con))
+
+    dbGetQuery(conn = con, statement = sql, params = params)
+  }
+
+  # Memoise with disk cache in /tmp/get_duckdb_cache
+  get_duckdb <<- memoise(
+    f = get_duckdb_func,
+    cache = cachem::cache_disk(dir = "/tmp/get_duckdb_cache")
+  )
+})
+
+# Define UI for application
 ui <- page_navbar(
   theme = bs_theme(preset = "bootstrap"),
   title = "Mirai Demo",
@@ -36,17 +60,13 @@ ui <- page_navbar(
   nav_item(input_dark_mode())
 )
 
+# Define server logic
 server <- function(input, output, session) {
   # Define mirai task to run SQL querys using duckdb
   query_task <- ExtendedTask$new(function(sql, params = list()) {
     mirai(
       {
-        library(duckdb)
-
-        con <- dbConnect(duckdb::duckdb())
-        on.exit(dbDisconnect(con))
-
-        dbGetQuery(conn = con, statement = sql, params = params)
+        get_duckdb(sql = sql, params = params)
       },
       sql = sql,
       params = params
@@ -56,20 +76,21 @@ server <- function(input, output, session) {
   # Submit example slow query when button clicked
   observeEvent(input$submit, {
     message("Button Clicked")
-    query_task$invoke("SELECT count(*) AS test_count FROM range(1000000000) t1, range(100) t2;")
+    query_task$invoke(
+      "SELECT count(*) AS test_count FROM range(1000000000) t1, range(100) t2;"
+    )
   })
 
   # Show current status of mirai daemons
   output$mirai_status <- renderText({
     invalidateLater(500)
 
-    a <- status()$mirai
+    a <- status()
 
     sprintf(
-      "Queries: %d waiting, %d running, %d completed",
-      a[1],
-      a[2],
-      a[3]
+      "Queries: %d waiting, %d running",
+      a$mirai[1],
+      a$mirai[2]
     )
   })
 
