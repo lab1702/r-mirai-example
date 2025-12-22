@@ -1,5 +1,6 @@
-# Shiny + mirai example: Single daemon processing long-running queries
-# Multiple users can submit queries; they queue and run one at a time
+# Shiny + mirai example: Queue multiple queries from a single button click
+# Uses mirai_map() to batch 3 queries; they queue and run one at a time
+# Results stored in reactiveVal and displayed in separate outputs
 # Any query that has been run before is cached on disk for fast retrieval
 
 library(shiny)
@@ -32,11 +33,8 @@ everywhere({
     dbGetQuery(conn = con, statement = sql, params = params)
   }
 
-  # Memoise with disk cache in /tmp/get_duckdb_cache
-  get_duckdb <<- memoise(
-    f = get_duckdb_func,
-    cache = cachem::cache_disk(dir = "/tmp/get_duckdb_cache")
-  )
+  # Memoise to cache query results in daemon memory
+  get_duckdb <<- memoise(get_duckdb_func)
 })
 
 ui <- page_navbar(
@@ -45,14 +43,22 @@ ui <- page_navbar(
   sidebar = sidebar(
     input_task_button(
       id = "submit",
-      label = "Submit Query"
+      label = "Submit 3 Queries"
     )
   ),
   nav_panel(
     "Main",
     card(
-      card_header("Result"),
-      verbatimTextOutput("result")
+      card_header("Query 1 Result"),
+      verbatimTextOutput("result1")
+    ),
+    card(
+      card_header("Query 2 Result"),
+      verbatimTextOutput("result2")
+    ),
+    card(
+      card_header("Query 3 Result"),
+      verbatimTextOutput("result3")
     ),
   ),
   nav_spacer(),
@@ -61,28 +67,41 @@ ui <- page_navbar(
 )
 
 server <- function(input, output, session) {
-  # Define mirai task to run SQL queries using duckdb
-  query_task <- ExtendedTask$new(function(sql, params = list()) {
-    mirai(
-      {
-        get_duckdb(sql = sql, params = params)
-      },
-      sql = sql,
-      params = params
-    )
+  # Store results from all queries
+  all_results <- reactiveVal(NULL)
+
+  # Watch for cache clear signal file
+  observe({
+    invalidateLater(1000)
+
+    if (file.exists("/tmp/clear_duckdb_cache_signal")) {
+      message("Cache clear signal detected - clearing cache")
+      mirai({
+        memoise::forget(get_duckdb)
+      })
+      file.remove("/tmp/clear_duckdb_cache_signal")
+    }
+  })
+
+  # Define mirai task to run multiple SQL queries using mirai_map
+  query_task <- ExtendedTask$new(function(queries) {
+    mirai_map(.x = queries, .f = function(sql) get_duckdb(sql))
   }) |> bind_task_button("submit")
 
-  # Submit example slow query when button clicked
+  # Submit 3 queries on button click
   observeEvent(input$submit, {
-    message("Button Clicked")
-    query_task$invoke(
-      "SELECT count(*) AS test_count FROM range(1000000000) t1, range(100) t2;"
-    )
+    message("Button Clicked - Submitting 3 queries")
+    all_results(NULL) # Clear previous results
+    query_task$invoke(list(
+      "SELECT 'Q1' AS q, count(*) AS c FROM range(1000000000) t1, range(100) t2;",
+      "SELECT 'Q2' AS q, count(*) AS c FROM range(1000000000) t3, range(100) t4;",
+      "SELECT 'Q3' AS q, count(*) AS c FROM range(1000000000) t5, range(100) t6;"
+    ))
   })
 
   # Show current status of mirai daemons
   output$mirai_status <- renderText({
-    invalidateLater(500)
+    invalidateLater(1000)
 
     a <- status()
 
@@ -93,12 +112,27 @@ server <- function(input, output, session) {
     )
   })
 
-  # Show result when complete
-  output$result <- renderPrint({
-    req(result <- query_task$result())
+  # Store results when all queries complete
+  observe({
+    req(results <- query_task$result())
+    message("All queries complete")
+    all_results(results)
+  })
 
-    message("Displaying Results")
-    result
+  # Each output pulls its specific result
+  output$result1 <- renderPrint({
+    req(all_results())
+    all_results()[[1]]
+  })
+
+  output$result2 <- renderPrint({
+    req(all_results())
+    all_results()[[2]]
+  })
+
+  output$result3 <- renderPrint({
+    req(all_results())
+    all_results()[[3]]
   })
 }
 

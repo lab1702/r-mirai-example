@@ -38,22 +38,24 @@ Running multiple queries concurrently would quickly exhaust server resources and
 1. **Mirai Daemon Setup**: A single Mirai daemon is initialized to process all incoming tasks sequentially
 2. **Task Queue**: When users submit queries, they are added to a queue in the daemon
 3. **Memoization**: Results are cached using `memoise` with a disk-based cache in `/tmp/get_duckdb_cache`
-4. **Status Updates**: The UI polls the daemon status every 500ms to display waiting and running query counts
+4. **Status Updates**: The UI polls the daemon status every 1000ms to display waiting and running query counts
 5. **Result Display**: When a query completes, results are automatically displayed in the UI
 
 ## Example Workflow
 
-The application includes a test query that counts combinations from a large range:
+The application submits 3 test queries that count combinations from large ranges:
 ```sql
-SELECT count(*) AS test_count FROM range(1000000000) t1, range(100) t2;
+SELECT 'Q1' AS q, count(*) AS c FROM range(1000000000) t1, range(100) t2;
+SELECT 'Q2' AS q, count(*) AS c FROM range(1000000000) t3, range(100) t4;
+SELECT 'Q3' AS q, count(*) AS c FROM range(1000000000) t5, range(100) t6;
 ```
 
-When you click "Submit Query", the application:
-- Submits the query to the Mirai daemon
+When you click "Submit 3 Queries", the application:
+- Batches all 3 queries using `mirai_map()` and queues them to the daemon
 - Continues to respond to user interactions
 - Shows how many queries are waiting/running
-- Displays results when the query completes
-- Caches the result for subsequent requests
+- Displays each result in its own card when complete
+- Caches each result for subsequent requests
 
 ## Requirements
 
