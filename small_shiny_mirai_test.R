@@ -9,7 +9,7 @@ library(mirai)
 
 # Start a single daemon - all tasks will queue through this one worker
 message("Starting Mirai daemons(1)")
-daemons(n = 1)
+daemons(1)
 
 # Cleanup daemon on app exit
 onStop(function() {
@@ -27,7 +27,7 @@ everywhere({
 
   # Using <<- to assign to daemon's global environment so functions persist
   get_duckdb_func <<- function(sql, params = list()) {
-    con <- dbConnect(duckdb::duckdb())
+    con <- dbConnect(duckdb())
     on.exit(dbDisconnect(con))
 
     dbGetQuery(conn = con, statement = sql, params = params)
@@ -46,6 +46,7 @@ ui <- page_navbar(
       label = "Submit 3 Queries"
     )
   ),
+  nav_spacer(),
   nav_panel(
     "Main",
     card(
