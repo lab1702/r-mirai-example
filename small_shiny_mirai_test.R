@@ -62,7 +62,7 @@ ui <- page_navbar(
 
 # Define server logic
 server <- function(input, output, session) {
-  # Define mirai task to run SQL querys using duckdb
+  # Define mirai task to run SQL queries using duckdb
   query_task <- ExtendedTask$new(function(sql, params = list()) {
     mirai(
       {
@@ -97,10 +97,9 @@ server <- function(input, output, session) {
   # Show result when complete
   output$result <- renderPrint({
     req(result <- query_task$result())
-    req(!is.null(result))
 
     message("Displaying Results")
-    print(result)
+    result
   })
 }
 
