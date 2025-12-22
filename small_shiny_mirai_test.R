@@ -16,14 +16,15 @@ onStop(function() {
   daemons(0)
 })
 
-# Configure mirai to use duckdb with memoisation for caching
+# Configure daemon workers with duckdb and memoisation
+# Note: Code inside everywhere() runs on daemon workers, not the main process
 message("Configuring all Mirai daemons")
 everywhere({
   library(DBI)
   library(duckdb)
   library(memoise)
 
-  # Define function to run duckdb queries
+  # Using <<- to assign to daemon's global environment so functions persist
   get_duckdb_func <<- function(sql, params = list()) {
     con <- dbConnect(duckdb::duckdb())
     on.exit(dbDisconnect(con))
@@ -38,7 +39,6 @@ everywhere({
   )
 })
 
-# Define UI for application
 ui <- page_navbar(
   theme = bs_theme(preset = "bootstrap"),
   title = "Mirai Demo",
@@ -60,7 +60,6 @@ ui <- page_navbar(
   nav_item(input_dark_mode())
 )
 
-# Define server logic
 server <- function(input, output, session) {
   # Define mirai task to run SQL queries using duckdb
   query_task <- ExtendedTask$new(function(sql, params = list()) {
@@ -103,5 +102,4 @@ server <- function(input, output, session) {
   })
 }
 
-# Run the application
 shinyApp(ui, server)
