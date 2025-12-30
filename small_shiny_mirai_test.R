@@ -12,7 +12,7 @@ message("Starting Mirai daemons(1)")
 daemons(1)
 
 # Cleanup daemon on app exit
-onStop(function() {
+onStop(\() {
   message("Stopping Mirai daemons(0)")
   daemons(0)
 })
@@ -77,16 +77,16 @@ server <- function(input, output, session) {
 
     if (file.exists("/tmp/clear_duckdb_cache_signal")) {
       message("Cache clear signal detected - clearing cache")
-      mirai({
-        memoise::forget(get_duckdb)
+      everywhere({
+        forget(get_duckdb)
       })
       file.remove("/tmp/clear_duckdb_cache_signal")
     }
   })
 
   # Define mirai task to run multiple SQL queries using mirai_map
-  query_task <- ExtendedTask$new(function(queries) {
-    mirai_map(.x = queries, .f = function(sql) get_duckdb(sql))
+  query_task <- ExtendedTask$new(\(queries) {
+    mirai_map(.x = queries, .f = \(sql) get_duckdb(sql))
   }) |> bind_task_button("submit")
 
   # Submit 3 queries on button click
