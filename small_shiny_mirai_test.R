@@ -63,6 +63,7 @@ ui <- page_navbar(
     ),
   ),
   nav_spacer(),
+  nav_item(textOutput("et_status")),
   nav_item(textOutput("mirai_status")),
   nav_item(input_dark_mode())
 )
@@ -98,6 +99,16 @@ server <- function(input, output, session) {
       "SELECT 'Q2' AS q, count(*) AS c FROM range(1000000000) t3, range(100) t4;",
       "SELECT 'Q3' AS q, count(*) AS c FROM range(1000000000) t5, range(100) t6;"
     ))
+  })
+
+  # Show current status of extended task
+  output$et_status <- renderText({
+    req(query_task$status())
+
+    sprintf(
+      "Task: %s",
+      query_task$status()
+    )
   })
 
   # Show current status of mirai daemons
